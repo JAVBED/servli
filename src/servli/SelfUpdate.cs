@@ -46,7 +46,7 @@ public static class SelfUpdate
         {
             string script = Path.Combine(Paths.Cache, "replace-servli.sh");
             string target = current.Replace("'", "'\\''");
-            File.WriteAllText(script, "#!/bin/sh\nsleep 2\ncp -- '" + executable.Replace("'", "'\\''") + "' '" + target + ".new'\nchmod +x -- '" + target + ".new'\nmv -f -- '" + target + ".new' '" + target + "'\n");
+            File.WriteAllText(script, "#!/bin/sh\nsleep 2\ncp '" + executable.Replace("'", "'\\''") + "' '" + target + ".new'\nchmod +x '" + target + ".new'\nmv -f '" + target + ".new' '" + target + "'\n");
             Process.Start(new ProcessStartInfo("/bin/sh") { ArgumentList = { script }, UseShellExecute = false, CreateNoWindow = true });
         }
         Console.WriteLine($"Staged servli {version}. Replacement will finish after this command exits.");
