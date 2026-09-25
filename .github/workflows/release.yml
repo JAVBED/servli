@@ -1,0 +1,95 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            rid: win-x64
+            archive: servli-windows-x64.zip
+          - runner: windows-11-arm
+            rid: win-arm64
+            archive: servli-windows-arm64.zip
+          - runner: ubuntu-24.04
+            rid: linux-x64
+            archive: servli-linux-x64.tar.gz
+          - runner: ubuntu-24.04-arm
+            rid: linux-arm64
+            archive: servli-linux-arm64.tar.gz
+          - runner: macos-15-intel
+            rid: osx-x64
+            archive: servli-macos-intel.tar.gz
+          - runner: macos-15
+            rid: osx-arm64
+            archive: servli-macos-arm64.tar.gz
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore and test
+        shell: bash
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore
+          dotnet test -c Release --no-build
+      - name: Publish standalone executable
+        shell: bash
+        run: |
+          version=1.0.0
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; fi
+          dotnet publish src/servli/servli.csproj -c Release -r "${{ matrix.rid }}" --self-contained true -p:Version="$version" -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/stage
+      - name: Smoke test executable
+        shell: bash
+        run: |
+          exe=dist/stage/servli
+          if [[ "${{ runner.os }}" == Windows ]]; then exe=dist/stage/servli.exe; fi
+          "$exe" help
+          "$exe" providers
+          SERVLI_HOME="$RUNNER_TEMP/servli-smoke" "$exe" doctor
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/archive | Out-Null
+          Compress-Archive -Path dist/stage/servli.exe -DestinationPath "dist/archive/${{ matrix.archive }}"
+      - name: Package Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist/archive
+          tar -C dist/stage -czf "dist/archive/${{ matrix.archive }}" servli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: dist/archive/${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

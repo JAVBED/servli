@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/servli/servli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/servli.Tests/servli.Tests.csproj" />
+  </Folder>
+</Solution>
