@@ -1,12 +1,27 @@
 # servli
 
-`servli` is JAVBED's cross-platform command-line manager for Minecraft servers. It creates isolated installations, obtains runtimes and server software from upstream projects, runs servers behind a local console host, and manages properties, backups, addons, mods, and updates. It has no GUI and does not ship Minecraft server binaries.
+`servli` is JAVBED's cross-platform command-line manager for Minecraft servers. Create a server, run it in the background, attach to its console, and manage its configuration, backups, packages, and updates from one CLI. Each server has its own directory. servli downloads server software from its upstream project when needed; the repository does not contain Minecraft binaries.
 
 ## Install
 
-Download the archive for your OS and CPU from [GitHub Releases](https://github.com/JAVBED/servli/releases). Extract `servli` (`servli.exe` on Windows), put it on your `PATH`, and run `servli help`. Release executables are self-contained; .NET is not required on the target machine. The first server creation downloads its upstream software and any needed private Java or PocketMine PHP runtime.
+When a release is available, download the archive for your OS and CPU from [GitHub Releases](https://github.com/JAVBED/servli/releases). Extract `servli` (`servli.exe` on Windows) into a directory on your `PATH`, open a new terminal, and run `servli help`. On macOS/Linux, make the extracted file executable with `chmod +x servli`. Release executables are self-contained; .NET is not required on the target machine. Until the first release, [build from source](#build-and-test).
 
 Supported release targets: Windows x64/ARM64, Linux x64/ARM64, macOS Intel/Apple Silicon. Mojang BDS itself only supplies Windows and Linux x64 packages. Some upstream runtimes may not exist for every OS/CPU combination; servli reports that explicitly.
+
+## Quick start
+
+```text
+servli providers                   # See available server software
+servli versions paper              # See available Minecraft versions
+servli create survival paper latest
+servli eula survival               # Read the linked EULA and type yes if you agree
+servli start survival
+servli status survival
+servli console survival            # Enter server commands; type detach to leave
+servli stop survival
+```
+
+`latest` resolves to a specific Minecraft version and build when the server is created. To pin a version, use a command such as `servli create survival paper 1.21.8`. Server creation may download Java privately; you normally do not need to install or configure it yourself. The EULA remains unaccepted until you explicitly accept it. Check the port and settings before exposing a server to the internet.
 
 ## Providers
 
@@ -25,7 +40,25 @@ Supported release targets: Windows x64/ARM64, Linux x64/ARM64, macOS Intel/Apple
 
 `versions` shows Minecraft versions for Java providers, current BDS version for BDS, and supported Bedrock versions parsed from release notes for PocketMine-MP/PowerNukkitX. `latest` is resolved to a concrete version in `servli.json`. BDS's official feed only exposes the current package; requests for an older BDS version fail instead of substituting a different version.
 
-## Everyday use
+## Command reference
+
+| Task | Command |
+| --- | --- |
+| Discover software and versions | `servli providers`, `servli versions <provider>` |
+| Create and inspect | `servli create <name> <provider> <version\|latest>`, `servli list`, `servli info <name>` |
+| Run and control | `servli start\|stop\|restart\|status\|console <name>` |
+| Read logs | `servli logs <name> [--follow]` |
+| Set Java EULA, properties, memory | `servli eula <name>`, `servli properties <name> [key] [value]`, `servli memory <name> <size>` |
+| Back up and restore | `servli backup <name>`, `servli backups <name>`, `servli restore <name> <backup> --yes`, `servli delete-backup <name> <backup>` |
+| Manage software and addons | `servli update <name>`, `servli update --all`, `servli addon <name> geyser\|floodgate\|remove <addon>` |
+| Install packages | `servli plugin\|mod search <name> <query>`, `servli plugin\|mod install <name> <file\|project>` |
+| Manage Java | `servli java list`, `servli java install <version>`, `servli java path <version>` |
+| Diagnose and remove | `servli doctor [name]`, `servli delete <name> --yes` |
+| Update servli | `servli update-self` |
+
+Commands that overwrite data, such as restore and delete, require `--yes`. Run `servli help` for the built-in summary. Add `--debug` to a command to print a stack trace when diagnosing an error.
+
+## Working with a server
 
 ```text
 servli providers
@@ -83,7 +116,7 @@ servli mod search modded sodium
 servli mod install modded ./my-mod.jar
 servli backup survival
 servli backups survival
-servli restore survival backup-20260925-123045-abcdef.zip --yes
+servli restore survival <backup-name-from-servli-backups> --yes
 ```
 
 Property edits retain comments and unknown keys. Modrinth installs select files matching the server loader and Minecraft version, verify SHA-512, and resolve required project dependencies. Local JAR installation works for Paper/Purpur, Fabric/Quilt/Forge/NeoForge, and PowerNukkitX. PocketMine accepts local PHAR plugins. Search and remote install through Modrinth are limited to Paper/Purpur and Java mod loaders. Restart after installing packages.
@@ -105,7 +138,7 @@ Provider updates retain the configured Minecraft version by default. servli crea
 
 `doctor` checks writable storage, free disk, installed runtimes, server executable, EULA, properties, stale PID state, addon files, and the configured port. The data directory defaults to `~/.servli` on all three OS families. Set `SERVLI_HOME` to an absolute path to change it. Each server has `servli.json`, `server/`, `backups/`, and `logs/` under `servers/<name>/`. Metadata does not contain secrets.
 
-Use `--debug` with any command for a stack trace. Normal errors are single-line messages. Network endpoints and project releases can change; run `servli doctor` and check the upstream project's status when discovery fails.
+Normal errors are single-line messages. If something fails, run `servli doctor <name>` for server checks or `servli doctor` for host checks. If version discovery fails, check network access and the upstream project's status. Use `--debug` for a stack trace. If a port is in use, inspect `server.properties` (or the Bedrock server's equivalent) and change its port with `servli properties <name> server-port <port>` where supported.
 
 ## Build and test
 
@@ -122,7 +155,7 @@ Set `SERVLI_LIVE_TESTS=1` to run the optional live metadata tests. `.github/work
 
 ## Project status
 
-The Windows x64 validation run covered real create/start/stop flows for Paper, Fabric, Quilt, Forge, NeoForge, BDS, PocketMine-MP, and PowerNukkitX; Vanilla and Purpur downloads and creation were verified. Geyser, Floodgate, and ViaVersion installation were verified and a Paper crossplay server was started. The CI workflow is configured to build and smoke-test the other release architectures, but has not run until this repository is pushed to GitHub. Their full server flows have not been run locally. BDS has no official historical version catalog. Modrinth search/install and provider update flows have automated logic but have not been exercised across every project and upstream release. Confirm compatibility before production use.
+The Windows x64 validation run covered real create/start/stop flows for Paper, Fabric, Quilt, Forge, NeoForge, BDS, PocketMine-MP, and PowerNukkitX; Vanilla and Purpur downloads and creation were verified. Geyser, Floodgate, and ViaVersion installation were verified and a Paper crossplay server was started. The [CI workflow](https://github.com/JAVBED/servli/actions) is configured to build and smoke-test the other release architectures. Their full server flows have not been run locally. BDS has no official historical version catalog. Modrinth search/install and provider update flows have automated logic but have not been exercised across every project and upstream release. Confirm compatibility before production use.
 
 ## Upstream projects and disclaimer
 
