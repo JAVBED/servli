@@ -115,7 +115,7 @@ Requires the .NET 10 SDK:
 dotnet restore
 dotnet build
 dotnet test
-dotnet publish src/servli/servli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+dotnet publish src/servli/servli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 Set `SERVLI_LIVE_TESTS=1` to run the optional live metadata tests. `.github/workflows/release.yml` builds and smoke-tests six self-contained archives on matching runners, publishes a GitHub Release for `v*` tags, and supports manual runs.
