@@ -122,7 +122,7 @@ Set `SERVLI_LIVE_TESTS=1` to run the optional live metadata tests. `.github/work
 
 ## Project status
 
-The Windows x64 validation run covered real create/start/stop flows for Paper, Fabric, Quilt, Forge, NeoForge, BDS, PocketMine-MP, and PowerNukkitX; Vanilla and Purpur downloads and creation were verified. Geyser, Floodgate, and ViaVersion installation were verified and a Paper crossplay server was started. Other release architectures are built and smoke-tested by CI, but their full server flows have not been run locally. BDS has no official historical version catalog. Modrinth search/install and provider update flows have automated logic but have not been exercised across every project and upstream release. Confirm compatibility before production use.
+The Windows x64 validation run covered real create/start/stop flows for Paper, Fabric, Quilt, Forge, NeoForge, BDS, PocketMine-MP, and PowerNukkitX; Vanilla and Purpur downloads and creation were verified. Geyser, Floodgate, and ViaVersion installation were verified and a Paper crossplay server was started. The CI workflow is configured to build and smoke-test the other release architectures, but has not run until this repository is pushed to GitHub. Their full server flows have not been run locally. BDS has no official historical version catalog. Modrinth search/install and provider update flows have automated logic but have not been exercised across every project and upstream release. Confirm compatibility before production use.
 
 ## Upstream projects and disclaimer
 
