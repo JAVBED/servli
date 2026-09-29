@@ -27,6 +27,7 @@ public sealed class App
             case "restart": { var meta = MetaStore.Load(Arg(args, 1)); await ProcessHost.StopAsync(meta); await ProcessHost.StartAsync(MetaStore.Load(meta.Name)); break; }
             case "status": { var meta = MetaStore.Load(Arg(args, 1)); Console.WriteLine($"{meta.Name}: {(ProcessHost.IsRunning(meta) ? $"RUNNING (PID {meta.ProcessId})" : "STOPPED")}"); break; }
             case "console": await ConsoleAsync(MetaStore.Load(Arg(args, 1))); break;
+            case "send": { var meta = MetaStore.Load(Arg(args, 1)); await ProcessHost.SendAsync(meta, string.Join(' ', args.Skip(2))); Console.WriteLine("Command sent."); break; }
             case "logs": await LogsAsync(MetaStore.Load(Arg(args, 1)), args.Contains("--follow")); break;
             case "eula": Eula(MetaStore.Load(Arg(args, 1))); break;
             case "properties": Properties(args); break;
@@ -54,7 +55,7 @@ public sealed class App
         servli versions <provider>       List Minecraft or software versions
         servli create <name> <provider> <version|latest> [--geyser] [--floodgate]
         servli list | info <name> | doctor [name]
-        servli start|stop|restart|status|console <name>
+        servli start|stop|restart|status|console <name> | send <name> <command...>
         servli logs <name> [--follow] | eula <name>
         servli properties <name> [key] [value] | memory <name> <size>
         servli backup <name> | backups <name>
