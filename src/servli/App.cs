@@ -73,8 +73,7 @@ public sealed class App
         var p = Providers.Get(provider);
         var versions = await p.GetVersionsAsync();
         Console.WriteLine($"{p.DisplayName}: {versions.Count} versions");
-        foreach (var version in versions.Take(30)) Console.WriteLine(version);
-        if (versions.Count > 30) Console.WriteLine($"… and {versions.Count - 30} older versions");
+        foreach (var version in versions) Console.WriteLine(version);
     }
     private static async Task CreateAsync(string[] args)
     {
