@@ -235,21 +235,38 @@ public sealed class GitHubProvider(string id) : IServerProvider
 
 public sealed class BdsProvider : IServerProvider
 {
+    private const string CatalogUrl = "https://raw.githubusercontent.com/Bedrock-OSS/BDS-Versions/refs/heads/main/versions.json";
     public string Id => "bds";
     public string DisplayName => "Mojang Bedrock Dedicated Server";
-    public async Task<IReadOnlyList<string>> GetVersionsAsync() => [(await ResolveAsync("latest")).MinecraftVersion];
+
+    private static string PlatformKey()
+    {
+        if (System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64)
+            throw new ServliException("Mojang BDS currently publishes Windows/Linux x64 binaries only.");
+        if (OperatingSystem.IsWindows()) return "windows";
+        if (OperatingSystem.IsLinux()) return "linux";
+        throw new ServliException("Mojang BDS currently publishes Windows/Linux x64 binaries only.");
+    }
+
+    public async Task<IReadOnlyList<string>> GetVersionsAsync()
+    {
+        using var doc = await Net.JsonAsync(CatalogUrl);
+        var node = doc.RootElement.GetProperty(PlatformKey());
+        return node.GetProperty("versions").EnumerateArray().Select(x => x.GetString()!).Reverse().ToArray();
+    }
+
     public async Task<Resolution> ResolveAsync(string requested)
     {
-        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.X64)
-            throw new ServliException("Mojang BDS currently publishes Windows/Linux x64 binaries only.");
-        using var doc = await Net.JsonAsync("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links");
-        string type = OperatingSystem.IsWindows() ? "serverBedrockWindows" : "serverBedrockLinux";
-        var entry = doc.RootElement.GetProperty("result").GetProperty("links").EnumerateArray().First(x => Net.Text(x, "downloadType") == type);
-        string url = Net.Text(entry, "downloadUrl");
-        var match = Regex.Match(url, @"bedrock-server-([\d.]+)\.zip$");
-        if (!match.Success) throw new ServliException("Mojang BDS download URL did not contain a version.");
-        string version = match.Groups[1].Value;
-        if (requested != "latest" && requested != version) throw new ServliException($"Mojang currently offers BDS {version}; requested {requested} is unavailable from the official download service.");
+        using var doc = await Net.JsonAsync(CatalogUrl);
+        string platform = PlatformKey();
+        var node = doc.RootElement.GetProperty(platform);
+        string version = requested == "latest" ? Net.Text(node, "stable") : requested;
+        var versions = node.GetProperty("versions").EnumerateArray().Select(x => x.GetString()!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!versions.Contains(version))
+            throw new ServliException($"BDS {version} is not present in the Bedrock-OSS BDS-Versions catalog for {platform}.");
+        string root = Net.Text(doc.RootElement, "cdn_root").TrimEnd('/');
+        string os = platform == "windows" ? "win" : "linux";
+        string url = $"{root}/bin-{os}/bedrock-server-{version}.zip";
         return new(version, version, new(new(url), "bedrock-server.zip"), 0, "zip");
     }
 }
