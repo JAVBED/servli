@@ -116,12 +116,18 @@ servli mod search modded sodium
 servli mod install modded ./my-mod.jar
 servli backup survival
 servli backups survival
+servli backups survival --json
+servli list --json
+servli schedule survival hourly --keep 10 --max-age-days 30
+servli schedule survival on-stop --keep 5
 servli restore survival <backup-name-from-servli-backups> --yes
 ```
 
 Property edits retain comments and unknown keys. Modrinth installs select files matching the server loader and Minecraft version, verify SHA-512, and resolve required project dependencies. Local JAR installation works for Paper/Purpur, Fabric/Quilt/Forge/NeoForge, and PowerNukkitX. PocketMine accepts local PHAR plugins. Search and remote install through Modrinth are limited to Paper/Purpur and Java mod loaders. Restart after installing packages.
 
 Backups are timestamped ZIP files of server data, excluding transient logs and lock/partial files. A running Java Edition server receives `save-off`, `save-all flush`, and `save-on`; the backup aborts if save completion is not confirmed. If Windows locks an open world file despite a successful flush, servli stops the server, archives it, and restarts it, reporting that interruption. Stop BDS, PocketMine, and PowerNukkitX before backup. Restore overwrites current server data and requires a stopped server plus `--yes`. Keep an off-machine copy of important backups.
+
+`list --json` and `backups <name> --json` provide structured data for JAVBED's dashboard. Backup schedules are saved per server and run in the SERVLI host while it is active, including when JAVBED is closed. Supported modes are `off`, `30m`, `hourly`, `<N>h`, `daily`, and `on-stop`. Scheduled live backups do not interrupt or restart a running server; failures appear in the host log. Retention keeps at least one backup. Restore creates an additional backup of current server data before replacing it.
 
 ## Updates and diagnostics
 

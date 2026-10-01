@@ -76,6 +76,8 @@ public static class ProcessHost
         meta.ProcessId = process.Id;
         meta.ProcessStartedUtc = process.StartTime.ToUniversalTime();
         MetaStore.Save(meta);
+        using var backupCancellation = new CancellationTokenSource();
+        var scheduledBackups = BackupSchedule.RunAsync(meta, backupCancellation.Token);
         string log = Path.Combine(Paths.Logs(meta.Name), $"console-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
         await using var writer = new StreamWriter(new FileStream(log, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
         var gate = new SemaphoreSlim(1);
@@ -137,8 +139,14 @@ public static class ProcessHost
             }
         });
         await process.WaitForExitAsync();
+        backupCancellation.Cancel();
         await Task.WhenAll(stdout, stderr);
         meta.ProcessId = null; meta.ProcessStartedUtc = null; MetaStore.Save(meta);
+        await scheduledBackups;
+        var stopSchedule = BackupSchedule.Load(meta.Name);
+        if (stopSchedule.Mode == "on-stop")
+            try { await Backup.CreateAsync(meta); BackupSchedule.Prune(meta.Name, stopSchedule); }
+            catch (Exception error) { Console.Error.WriteLine("On-stop backup failed: " + error.Message); }
         try { await listener.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
     }
     public static async Task SendAsync(ServerMeta meta, string command)

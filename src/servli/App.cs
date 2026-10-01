@@ -20,7 +20,7 @@ public sealed class App
             case "providers": foreach (var p in Providers.All) Console.WriteLine($"{p.Id,-16} {p.DisplayName}"); break;
             case "versions": await VersionsAsync(Arg(args, 1)); break;
             case "create": await CreateAsync(args); break;
-            case "list": List(); break;
+            case "list": if (args.Contains("--json")) ListJson(); else List(); break;
             case "info": Info(MetaStore.Load(Arg(args, 1))); break;
             case "start": await ProcessHost.StartAsync(MetaStore.Load(Arg(args, 1))); break;
             case "stop": await ProcessHost.StopAsync(MetaStore.Load(Arg(args, 1))); break;
@@ -33,7 +33,8 @@ public sealed class App
             case "properties": Properties(args); break;
             case "memory": Memory(args); break;
             case "backup": { var meta = MetaStore.Load(Arg(args, 1)); Console.WriteLine("Backup created: " + Path.GetFileName(await Backup.CreateAsync(meta))); break; }
-            case "backups": Backups(MetaStore.Load(Arg(args, 1))); break;
+            case "backups": { var meta = MetaStore.Load(Arg(args, 1)); if (args.Contains("--json")) BackupsJson(meta); else Backups(meta); break; }
+            case "schedule": BackupScheduleCommand(args); break;
             case "restore": { var meta = MetaStore.Load(Arg(args, 1)); Backup.Restore(meta, Arg(args, 2), args.Contains("--yes")); Console.WriteLine("Restored."); break; }
             case "delete-backup": DeleteBackup(args); break;
             case "update": await UpdateAsync(args); break;
@@ -54,11 +55,12 @@ public sealed class App
         servli providers                 List server implementations
         servli versions <provider>       List Minecraft or software versions
         servli create <name> <provider> <version|latest> [--geyser] [--floodgate]
-        servli list | info <name> | doctor [name]
+        servli list [--json] | info <name> | doctor [name]
         servli start|stop|restart|status|console <name> | send <name> <command...>
         servli logs <name> [--follow] | eula <name>
         servli properties <name> [key] [value] | memory <name> <size>
-        servli backup <name> | backups <name>
+        servli backup <name> | backups <name> [--json]
+        servli schedule <name> [off|30m|hourly|<N>h|daily|on-stop] [--keep N] [--max-age-days N]
         servli restore <name> <backup> --yes | delete-backup <name> <backup>
         servli update <name>|--all | update-self
         servli addon <name> geyser|floodgate|remove <addon>
@@ -94,6 +96,22 @@ public sealed class App
             try { var m = MetaStore.Load(name); Console.WriteLine($"{Clip(name,nameWidth).PadRight(nameWidth)} {Clip(m.Provider,softwareWidth).PadRight(softwareWidth)} {Clip(m.MinecraftVersion,minecraftWidth).PadRight(minecraftWidth)} {(ProcessHost.IsRunning(m) ? "RUNNING" : "STOPPED").PadRight(statusWidth)} {(m.JavaVersion == 0 ? "-" : m.Memory)}"); }
             catch { Console.WriteLine($"{Clip(name,nameWidth).PadRight(nameWidth)} CORRUPT"); }
         }
+    }
+    private static void ListJson()
+    {
+        var rows = MetaStore.Names().Select(name =>
+        {
+            try
+            {
+                var meta = MetaStore.Load(name);
+                bool running = ProcessHost.IsRunning(meta);
+                string properties = Path.Combine(Paths.Content(name), "server.properties");
+                int port = int.TryParse(PropertiesFile.Get(properties, "server-port"), out int parsed) ? parsed : meta.Provider is "bds" or "pocketmine" or "powernukkitx" ? 19132 : 25565;
+                return new { name = meta.Name, provider = meta.Provider, minecraftVersion = meta.MinecraftVersion, softwareVersion = meta.SoftwareVersion, running, pid = running ? meta.ProcessId : null, memory = meta.Memory, port, startedUtc = running ? meta.ProcessStartedUtc : null, data = Paths.Server(name), schedule = BackupSchedule.Load(name) };
+            }
+            catch { return null; }
+        }).Where(row => row is not null);
+        Console.WriteLine(JsonSerializer.Serialize(rows));
     }
     private static string Clip(string value, int width) => value.Length <= width ? value : value[..(width - 1)] + "…";
     private static void Info(ServerMeta m)
@@ -171,6 +189,25 @@ public sealed class App
     {
         if (!Directory.Exists(Paths.Backups(m.Name))) return;
         foreach (var file in Directory.EnumerateFiles(Paths.Backups(m.Name), "*.zip").OrderByDescending(x => x)) Console.WriteLine($"{Path.GetFileName(file),-43} {Net.FormatSize(new FileInfo(file).Length)}");
+    }
+    private static void BackupsJson(ServerMeta m)
+    {
+        var rows = Directory.Exists(Paths.Backups(m.Name)) ? Directory.EnumerateFiles(Paths.Backups(m.Name), "*.zip").OrderByDescending(path => path).Select(path => new { name = Path.GetFileName(path), size = new FileInfo(path).Length, createdUtc = File.GetCreationTimeUtc(path) }) : [];
+        Console.WriteLine(JsonSerializer.Serialize(rows));
+    }
+    private static void BackupScheduleCommand(string[] args)
+    {
+        var meta = MetaStore.Load(Arg(args, 1));
+        if (args.Length == 2) { Console.WriteLine(JsonSerializer.Serialize(BackupSchedule.Load(meta.Name))); return; }
+        int Option(string flag, int fallback, bool allowZero = false)
+        {
+            int index = Array.IndexOf(args, flag);
+            return index < 0 ? fallback : int.TryParse(Arg(args, index + 1), out int value) && (value > 0 || allowZero && value == 0) ? value : throw new ServliException(flag + " must be a nonnegative number.");
+        }
+        var schedule = new BackupSchedule { Mode = Arg(args, 2).ToLowerInvariant(), Keep = Option("--keep", 10), MaxAgeDays = Option("--max-age-days", 0, true) };
+        schedule.Validate();
+        BackupSchedule.Save(meta.Name, schedule);
+        Console.WriteLine("Backup schedule saved. It runs while the server host is active; changes apply within 30 seconds.");
     }
     private static void DeleteBackup(string[] args)
     {

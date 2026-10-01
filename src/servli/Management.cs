@@ -167,8 +167,10 @@ public static class PropertiesFile
 public static class Backup
 {
     public static string Name(DateTimeOffset time) => $"backup-{time.UtcDateTime:yyyyMMdd-HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.zip";
-    public static async Task<string> CreateAsync(ServerMeta meta)
+    public static async Task<string> CreateAsync(ServerMeta meta, bool allowRestart = true)
     {
+        Directory.CreateDirectory(Paths.Backups(meta.Name));
+        using var backupLock = new FileStream(Path.Combine(Paths.Backups(meta.Name), ".backup.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         bool running = ProcessHost.IsRunning(meta), saveOff = false;
         if (running)
         {
@@ -184,13 +186,13 @@ public static class Backup
                 throw;
             }
         }
-        Directory.CreateDirectory(Paths.Backups(meta.Name));
         string file = Path.Combine(Paths.Backups(meta.Name), Name(DateTimeOffset.UtcNow));
         bool retryStopped = false;
         try
         {
             try { WriteArchive(meta, file); }
-            catch (IOException) when (running) { retryStopped = true; if (File.Exists(file)) File.Delete(file); }
+            catch (IOException) when (running && allowRestart) { retryStopped = true; if (File.Exists(file)) File.Delete(file); }
+            catch { if (File.Exists(file)) File.Delete(file); throw; }
         }
         finally
         {
@@ -221,8 +223,9 @@ public static class Backup
         string file = Path.Combine(Paths.Backups(meta.Name), backup);
         if (Path.GetFileName(backup) != backup || !File.Exists(file)) throw new ServliException("Backup not found.");
         if (!yes) throw new ServliException("Restore overwrites current server data. Run again with --yes to confirm.");
-        string target = Paths.Content(meta.Name), old = target + ".before-restore";
-        if (Directory.Exists(old)) Directory.Delete(old, true);
+        Directory.CreateDirectory(Paths.Backups(meta.Name));
+        WriteArchive(meta, Path.Combine(Paths.Backups(meta.Name), Name(DateTimeOffset.UtcNow)));
+        string target = Paths.Content(meta.Name), old = target + ".before-restore-" + Guid.NewGuid().ToString("N");
         Directory.Move(target, old);
         try { Archive.ExtractZip(file, target); Directory.Delete(old, true); }
         catch { if (Directory.Exists(target)) Directory.Delete(target, true); Directory.Move(old, target); throw; }

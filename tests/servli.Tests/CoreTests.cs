@@ -80,6 +80,24 @@ public sealed class CoreTests
         Assert.EndsWith(".zip", first);
     }
 
+    [Theory]
+    [InlineData("30m", 30)]
+    [InlineData("hourly", 60)]
+    [InlineData("3h", 180)]
+    [InlineData("daily", 1440)]
+    public void Backup_schedule_intervals_are_valid(string mode, int minutes)
+    {
+        var schedule = new BackupSchedule { Mode = mode, Keep = 5 };
+        schedule.Validate();
+        Assert.Equal(TimeSpan.FromMinutes(minutes), schedule.Interval);
+    }
+
+    [Theory]
+    [InlineData("0h")]
+    [InlineData("weekly")]
+    [InlineData("9999h")]
+    public void Invalid_backup_schedule_is_rejected(string mode) => Assert.Throws<ServliException>(() => new BackupSchedule { Mode = mode }.Validate());
+
     [Fact]
     public void Checksum_verification_detects_corruption()
     {
